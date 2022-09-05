@@ -59,7 +59,8 @@ of Paxos meet these constraints.
 
 ## Approach
 
-This repository currently only has guidelines for single-instance paxos.
+This repository has guidelines for both single-instance and multi-instance
+paxos.
 
 We describe the files in the `src/guidelines` directory in the order that they
 should be read.
@@ -91,6 +92,11 @@ voted, ballot, etc., are as general as they were in `definitions.lean`.
 `definitions.lean`, and if we have a protocol on these system states that
 satisfies the requirements outlined in `requirements.lean`, then the resulting
 protocol will meet the consensus safety requirements.
+
+`multipaxos.lean` proves the associated results for multipaxos where the same
+current ballot is used for all slots. The proof is to show that the
+single-instance paxos requirements are met for each slot, hence each slot is
+safe.
 
 It's likely this has already been done, but I haven't found a paper or lecture
 notes that describes this. If you find one, please feel free to link it.
