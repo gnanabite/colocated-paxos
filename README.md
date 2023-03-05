@@ -44,7 +44,7 @@ mean that a server stores a proposal which it promised not to accept. Hence
 without making a change to the definition of "voted", this protocol would no
 longer be safe. It turns out that this change is safe as long as you change the
 definition of "voted" to be "has sent a p2b message for the ballot", but
-reasoning about this is, in my opinition, not trivial -- one needs to basically
+reasoning about this is, in my opinion, not trivial -- one needs to basically
 redo the entire proof of the safety of Paxos with these new definitions.
 
 With additional concepts like timers, heartbeats, etc., it can be quite tricky
