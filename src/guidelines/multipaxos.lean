@@ -88,6 +88,9 @@ structure proto_constraints
         proto.next state s' →
           defs.voted s' process slot ballot →
             defs.voted state process slot ballot ∨ defs.curr state process ≤ ballot))
+  (voted_stable :
+    ∀ process slot ballot,
+      proto.stable (λ state, defs.voted state process slot ballot))
   (voted_imp_proposed :
     ∀ process slot ballot,
       proto.invariant (λ state,
@@ -118,27 +121,30 @@ def safety (proto : protocol sys_state_t)
   (defs : state_defs sys_state_t pid_t slot_t ballot_t value_t)
   := proto.invariant (λ state, (∀ slot v v', defs.chosen state slot v → defs.chosen state slot v' → v = v'))
 
+def safety_v2 (proto : protocol sys_state_t)
+  (defs : state_defs sys_state_t pid_t slot_t ballot_t value_t)
+  := proto.invariant (λ state, (∀ later_state slot v v', proto.reachable_from state later_state →
+                                  defs.chosen state slot v → defs.chosen later_state slot v' → v = v'))
+
 end multipaxos
 
+variables (sys_state_t pid_t slot_t ballot_t value_t : Type)
+          [linear_order ballot_t] [decidable_eq pid_t] (proto : protocol sys_state_t)
+          (defs : multipaxos.state_defs sys_state_t pid_t slot_t ballot_t value_t)
 
-variables {sys_state_t pid_t slot_t ballot_t value_t : Type}
-          [linear_order ballot_t] [decidable_eq pid_t]
-          {proto : protocol sys_state_t}
-          {defs : multipaxos.state_defs sys_state_t pid_t slot_t ballot_t value_t}
-
-theorem constraints_give_safety : multipaxos.proto_constraints proto defs → multipaxos.safety proto defs :=
-begin
-intro multipaxos_constraints_met,
-suffices key : ∀ slot, proto.invariant (λ state, (∀ v v', defs.chosen state slot v → defs.chosen state slot v' → v = v')),
-by { intros state reachable slot, exact key slot state reachable },
-intro slot,
-let slot_instance_defs : paxos_defs sys_state_t pid_t ballot_t value_t :=
+-- Given a multipaxos algorithm, we can restrict to a single slot to get a
+-- single-instance paxos algorithm.
+def slot_instance_defs (slot : slot_t): paxos_defs sys_state_t pid_t ballot_t value_t :=
 { curr := λ state p, defs.curr state p,
   stored := λ state p, defs.stored state p slot,
   proposed := λ state ballot value, defs.proposed state slot ballot value,
   voted := λ state p ballot, defs.voted state p slot ballot,
-  quorum := defs.quorum },
-let slot_instance_reqs_sat : requirements proto slot_instance_defs :=
+  quorum := defs.quorum }
+
+-- The single-instance paxos algorithm obtained in this way meets the safety
+-- constraints.
+def slot_instance_reqs_sat (multipaxos_constraints_met : multipaxos.proto_constraints proto defs) (slot : slot_t)
+  : requirements proto (slot_instance_defs sys_state_t pid_t slot_t ballot_t value_t defs slot) :=
 { quorums_intersect := multipaxos_constraints_met.quorums_intersect,
   none_proposed_at_init := λ state ballot value is_init,
     multipaxos_constraints_met.none_proposed_at_init state slot ballot value is_init,
@@ -155,12 +161,14 @@ let slot_instance_reqs_sat : requirements proto slot_instance_defs :=
     multipaxos_constraints_met.stored_is_proposed process slot prop,
   new_votes_ge_curr_ballot := λ process ballot s',
     multipaxos_constraints_met.new_votes_ge_curr_ballot process slot ballot s',
+  voted_stable := λ process ballot,
+    multipaxos_constraints_met.voted_stable process slot ballot,
   voted_imp_proposed := λ process ballot,
     multipaxos_constraints_met.voted_imp_proposed process slot ballot,
   voted_le_stored := λ process ballot,
     multipaxos_constraints_met.voted_le_stored process slot ballot,
   majority_have_upper_interval_if_proposed := by {
-    suffices key : (proto_with_intervals_recorded slot_instance_defs proto).invariant
+    suffices key : (proto_with_intervals_recorded (slot_instance_defs sys_state_t pid_t slot_t ballot_t value_t defs slot) proto).invariant
       (λ restricted_state,
         ∃ full_state, (multipaxos.state_with_past_intervals defs proto).reachable full_state ∧
                       full_state.fst = restricted_state.fst ∧
@@ -194,7 +202,25 @@ let slot_instance_reqs_sat : requirements proto slot_instance_defs :=
     { refl },
     rw function.funext_iff, intro p,
     rw next_reachable.right p, unfold prod.snd,
-    rw lift_snd_restriction_gives_snd
-  } },
-exact requirements_give_safety slot_instance_reqs_sat
+    rw lift_snd_restriction_gives_snd,
+    unfold slot_instance_defs
+  } }
+
+theorem constraints_give_safety : multipaxos.proto_constraints proto defs → multipaxos.safety proto defs :=
+begin
+intro multipaxos_constraints_met,
+suffices key : ∀ slot, proto.invariant (λ state, (∀ v v', defs.chosen state slot v → defs.chosen state slot v' → v = v')),
+by { intros state reachable slot, exact key slot state reachable },
+intro slot,
+exact requirements_give_safety (slot_instance_reqs_sat sys_state_t pid_t slot_t ballot_t value_t proto defs multipaxos_constraints_met slot)
+end
+
+theorem constraints_give_safety_v2 : multipaxos.proto_constraints proto defs → multipaxos.safety_v2 proto defs :=
+begin
+intro multipaxos_constraints_met,
+suffices key : ∀ slot, proto.invariant (λ state, (∀ later_state v v', proto.reachable_from state later_state →
+                                                    defs.chosen state slot v → defs.chosen later_state slot v' → v = v')),
+by { intros state reachable later_state slot, exact key slot state reachable later_state },
+intro slot,
+exact requirements_give_safety_v2 (slot_instance_reqs_sat sys_state_t pid_t slot_t ballot_t value_t proto defs multipaxos_constraints_met slot)
 end

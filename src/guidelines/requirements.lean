@@ -48,6 +48,9 @@ structure requirements
         proto.next state s' →
           defs.voted s' process ballot →
             defs.voted state process ballot ∨ defs.curr state process ≤ ballot))
+  (voted_stable :
+    ∀ process ballot,
+      proto.stable (λ state, defs.voted state process ballot))
   (voted_imp_proposed :
     ∀ process ballot,
       proto.invariant (λ state,
@@ -180,6 +183,19 @@ apply (λ goal, reqs_sat.voted_le_stored process ballot lift_w.fst goal process_
 rcases reachable_in_proto_with_intervals_recorded_implies_first_reachable
       defs proto lift_u lift_u_reachable with ⟨k, hk⟩,
 exact ⟨k.succ, lift_u.fst, hk, lift_u_next_lift_w.left⟩
+end
+
+lemma chosen_stable (reqs_sat : requirements proto defs) (v : value_t) :
+  proto.stable (λ state, defs.chosen state v) :=
+begin
+intros s s' chosen_at_s s'_follows_s,
+rcases chosen_at_s with ⟨b, ⟨q, q_is_quorum, majority_voted_at_q⟩, b_v_proposed_at_s⟩,
+use b, split,
+{ use [q, q_is_quorum],
+  intros voter in_quorum,
+  specialize majority_voted_at_q voter in_quorum,
+  exact reqs_sat.voted_stable voter b s s' majority_voted_at_q s'_follows_s },
+  exact reqs_sat.proposed_stable b v s s' b_v_proposed_at_s s'_follows_s,
 end
 
 end requirements

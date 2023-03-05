@@ -6,8 +6,16 @@ import data.finset.basic
 variables {sys_state_t pid_t ballot_t value_t : Type}
           [linear_order ballot_t] [decidable_eq pid_t]
 
+-- The first variant says that if two values are chosen at the same state, then they must be the
+-- same value.
 def safety (proto : protocol sys_state_t) (defs : paxos_defs sys_state_t pid_t ballot_t value_t)
   := proto.invariant (λ state, (∀ v v', defs.chosen state v → defs.chosen state v' → v = v'))
+
+-- The second variant says that if a value is chosen at one state and another value is chosen at a
+-- later state, then both must be the same value.
+def safety_v2 (proto : protocol sys_state_t) (defs : paxos_defs sys_state_t pid_t ballot_t value_t)
+  := proto.invariant (λ s, (∀ s' v v',
+                        proto.reachable_from s s' → defs.chosen s v → defs.chosen s' v' → v = v'))
 
 variables {proto : protocol sys_state_t} {defs : paxos_defs sys_state_t pid_t ballot_t value_t}
 
@@ -153,4 +161,15 @@ cases is_eq_or_is_lt with is_eq is_lt,
 { apply reqs_sat.proposals_unique b v v' s reach_s b_v_prop,
   rw is_eq, exact b'_v'_prop },
 exact eq.symm (proposed_higher_than_chosen_has_same_val reqs_sat s reach_s b' v' b'_chosen b'_v'_prop b is_lt v b_v_prop)
+end
+
+theorem requirements_give_safety_v2 : requirements proto defs → safety_v2 proto defs :=
+begin
+intro reqs_sat,
+intros s s_reachable s' v v' s'_reachable_from_s v_chosen_at_s v'_chosen_at_s',
+have v_chosen_at_s' : defs.chosen s' v
+  := proto.stability_applies_to_reachable_from (λ s, defs.chosen s v)
+                                               (reqs_sat.chosen_stable v) s s' s'_reachable_from_s v_chosen_at_s,
+have s'_reachable : proto.reachable s' := proto.reachable_from_reachable_is_reachable s s' s_reachable s'_reachable_from_s,
+exact requirements_give_safety reqs_sat s' s'_reachable v v' v_chosen_at_s' v'_chosen_at_s',
 end
